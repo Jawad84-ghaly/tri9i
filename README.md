@@ -14,7 +14,7 @@ Cette compilation active `EXPO_PUBLIC_MAP_PROVIDER=osm` : une carte OpenStreetMa
 
 Le cache HTTP du WebView reste actif ; aucun téléchargement massif ou mode hors ligne n'est implémenté. Le service de tuiles communautaire est sans garantie de disponibilité : prévoir un fournisseur adapté avant une diffusion à grande échelle, conformément à la [politique OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/).
 
-Le profil EAS `preview` produit également un APK démo autonome : `pnpm dlx eas-cli build --platform android --profile preview`. Il nécessite un compte Expo connecté et une configuration EAS du projet. Le workflow GitHub n'en a pas besoin.
+Le profil EAS `preview` produit également un APK démo autonome : `pnpm --package=eas-cli dlx eas build --platform android --profile preview`. Il nécessite un compte Expo connecté et une configuration EAS du projet. Le workflow GitHub n'en a pas besoin.
 
 La compilation GitHub utilise la signature de développement du projet natif généré, uniquement pour les essais. Une mise à jour peut demander de désinstaller l'ancienne démo. Configurer une signature de production privée et persistante avant toute publication en magasin. L'APK ne contient aucune clé Google ou Mapbox ; activer le mode réel et configurer Mapbox et le serveur d'alertes exige une nouvelle compilation. `EXPO_PUBLIC_MAP_PROVIDER=native` conserve `react-native-maps` et nécessite une clé Google pour Android.
 
@@ -247,3 +247,4 @@ Un export JavaScript réussi ne remplace pas la compilation native et ces essais
 - [Spécification Waze Data Feed](https://support.google.com/waze/partners/answer/13458165?hl=en) : accès partenaire et données autorisées.
 
 Les conditions d'utilisation, l'attribution et les droits de redistribution des données de chaque fournisseur doivent être conservés dans l'application finale.
+
