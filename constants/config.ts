@@ -1,4 +1,5 @@
 export const config = {
+  osmMap: process.env.EXPO_PUBLIC_MAP_PROVIDER === 'osm',
   // No automatic fake-data fallback after a network failure.
   demo: process.env.EXPO_PUBLIC_DEMO_MODE !== 'false',
   mapboxToken: process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '',

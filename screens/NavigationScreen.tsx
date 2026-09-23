@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { OpenStreetMap } from '../components/OpenStreetMap';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -197,7 +198,10 @@ export default function NavigationScreen() {
   return <View style={styles.root}>
     <StatusBar barStyle="dark-content" />
     {navigating && foreground && <Awake />}
-    <MapView ref={map} style={StyleSheet.absoluteFillObject} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+    {config.osmMap ? <OpenStreetMap fix={fix} route={route} destination={destination} alerts={allAlerts}
+      following={following} navigating={navigating} foreground={foreground} onPan={() => setFollowing(false)}
+      onAlert={showAlert} onPin={coordinate => { if (!navigating && gpsReady && !config.demo) chooseDestination({ id: 'pin', name: ui.pin, coordinate }); }} />
+    : <MapView ref={map} style={StyleSheet.absoluteFillObject} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
       mapPadding={{ top: 170, bottom: bottomHeight + 70, left: 12, right: 12 }}
       initialRegion={{ ...(fix ?? demoOrigin), latitudeDelta: 0.055, longitudeDelta: 0.055 }}
       showsUserLocation={!config.demo && !!fix} showsMyLocationButton={false} showsCompass={false}
@@ -209,7 +213,7 @@ export default function NavigationScreen() {
       {config.demo && fix && <Marker coordinate={fix} anchor={{ x: 0.5, y: 0.5 }}><View style={styles.vehicle}><Text style={styles.vehicleText}>➤</Text></View></Marker>}
       {allAlerts.map(alert => <Marker key={alert.id} coordinate={alert.coordinate} onPress={() => showAlert(alert)}
         accessibilityLabel={alertLabels[alert.kind]}><View style={styles.alertMarker}><Text style={styles.alertEmoji}>{alertIcons[alert.kind]}</Text></View></Marker>)}
-    </MapView>
+    </MapView>}
     <SafeAreaView style={styles.overlay} pointerEvents="box-none">
       <View style={styles.top}>
         <View style={styles.brandRow}><View style={styles.brandIcon}><Text style={styles.brandGlyph}>ط</Text></View>
@@ -234,6 +238,10 @@ export default function NavigationScreen() {
         {!!message && <Text accessibilityLiveRegion="polite" style={styles.warning}>{message}</Text>}
       </View>
       <View style={styles.spacer} pointerEvents="none" />
+      {config.osmMap && <Pressable accessibilityRole="link" style={styles.osmCredit}
+        onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright').catch(() => setMessage(ui.network)); }}>
+        <Text style={styles.osmCreditText}>© OpenStreetMap contributors</Text>
+      </Pressable>}
       <View style={styles.floatingRow}>
         <Button title={ui.follow} secondary onPress={() => setFollowing(true)} />
         <Button title={muted ? ui.unmute : ui.mute} secondary onPress={() => setMuted(value => !value)} />
@@ -280,6 +288,8 @@ export default function NavigationScreen() {
 }
 
 const styles = StyleSheet.create({
+  osmCredit: { alignSelf: 'flex-start', backgroundColor: '#FFFEF9', marginLeft: 16, marginBottom: 5, padding: 4, borderRadius: 5 },
+  osmCreditText: { color: '#173E35', fontSize: 11 },
   root: { flex: 1, backgroundColor: '#E9F0EC' }, overlay: { flex: 1 },
   top: { marginHorizontal: 16, padding: 15, borderRadius: 24, backgroundColor: '#FFFEF9', gap: 8, elevation: 5, shadowColor: '#143B32', shadowOpacity: 0.12, shadowRadius: 12 },
   brandRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }, brand: { fontSize: 28, fontWeight: '900', color: '#173E35', textAlign: 'right' },

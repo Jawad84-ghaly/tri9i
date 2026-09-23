@@ -6,6 +6,18 @@ Le projet est une **base fonctionnelle à tester**, avec démonstration simulée
 
 ## Démarrer en mode démonstration
 
+### APK Android autonome
+
+Le workflow GitHub **Android APK demo** compile une version de test ARM 32/64 bits et publie `tri9i-demo.apk` dans les Releases après réussite des tests. Il peut être relancé depuis l'onglet Actions. L'APK embarque son JavaScript : aucun Expo Go, QR ni serveur Metro n'est nécessaire. C'est une démonstration simulée, pas encore une version validée pour la conduite réelle.
+
+Cette compilation active `EXPO_PUBLIC_MAP_PROVIDER=osm` : une carte OpenStreetMap en 2D orientée au nord, sans clé Google. Internet reste nécessaire pour les tuiles et Leaflet 1.9.4 (CDN avec vérification d'intégrité). Les marqueurs, alertes, zoom, déplacement et suivi sont disponibles. En cas de panne de carte, un message permet de réessayer. L'attribution reste visible au-dessus des commandes.
+
+Le cache HTTP du WebView reste actif ; aucun téléchargement massif ou mode hors ligne n'est implémenté. Le service de tuiles communautaire est sans garantie de disponibilité : prévoir un fournisseur adapté avant une diffusion à grande échelle, conformément à la [politique OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/).
+
+Le profil EAS `preview` produit également un APK démo autonome : `pnpm dlx eas-cli build --platform android --profile preview`. Il nécessite un compte Expo connecté et une configuration EAS du projet. Le workflow GitHub n'en a pas besoin.
+
+La compilation GitHub utilise la signature de développement du projet natif généré, uniquement pour les essais. Une mise à jour peut demander de désinstaller l'ancienne démo. Configurer une signature de production privée et persistante avant toute publication en magasin. L'APK ne contient aucune clé Google ou Mapbox ; activer le mode réel et configurer Mapbox et le serveur d'alertes exige une nouvelle compilation. `EXPO_PUBLIC_MAP_PROVIDER=native` conserve `react-native-maps` et nécessite une clé Google pour Android.
+
 Prérequis : Node.js 22 LTS ou supérieur, npm, Android/iOS. Le projet utilise Expo SDK 55, React Native 0.83.10 et React 19.2. Le fichier `pnpm-lock.yaml` fixe les versions vérifiées ; pnpm 11 est une autre option d'installation.
 
 ```bash

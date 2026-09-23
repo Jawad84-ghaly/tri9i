@@ -24,6 +24,7 @@
     "react-native": "0.83.10",
     "react-native-maps": "1.27.2",
     "react-native-safe-area-context": "~5.6.2",
+    "react-native-webview": "13.16.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
