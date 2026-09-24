@@ -73,6 +73,12 @@ export default function NavigationScreen() {
   }, [foreground]);
 
   const loadRoutes = useCallback(async (target: Destination, initial: boolean) => {
+    // Allow saving any pinned place in demo mode, but never draw the Casablanca
+    // fixture as if it reached a real home/work location elsewhere.
+    if (config.demo && (target.coordinate.latitude !== demoDestination.coordinate.latitude
+        || target.coordinate.longitude !== demoDestination.coordinate.longitude)) {
+      setOptions([]); setMessage('تقدر تسجّل هاد البلاصة. باش نحسبو الطريق ليها خاص تفعيل الخدمة الحقيقية.'); return false;
+    }
     const origin = fixRef.current;
     if (!origin || (!config.demo && (origin.accuracy > 60 || Date.now() - origin.timestamp > 20_000))) return;
     routeRequest.current?.abort();
@@ -95,6 +101,7 @@ export default function NavigationScreen() {
   }, []);
 
   function chooseDestination(target: Destination) {
+    routeRequest.current?.abort(); setBusy(false); setOptions([]); setNavigating(false); speech.stop();
     searchRequest.current?.abort(); setSearching(false); setResults([]); Keyboard.dismiss();
     setDestination(target); setQuery(target.name); setFollowing(false);
     demoElapsed.current = 0;
@@ -201,13 +208,13 @@ export default function NavigationScreen() {
     {navigating && foreground && <Awake />}
     {config.osmMap ? <OpenStreetMap fix={fix} route={route} destination={destination} alerts={allAlerts}
       following={following} navigating={navigating} foreground={foreground} onPan={() => setFollowing(false)}
-      onAlert={showAlert} onPin={coordinate => { if (!navigating && gpsReady && !config.demo) chooseDestination({ id: 'pin', name: ui.pin, coordinate }); }} />
+      onAlert={showAlert} onPin={coordinate => { if (!navigating) chooseDestination({ id: 'pin', name: ui.pin, coordinate }); }} />
     : <MapView ref={map} style={StyleSheet.absoluteFillObject} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
       mapPadding={{ top: 170, bottom: bottomHeight + 70, left: 12, right: 12 }}
       initialRegion={{ ...(fix ?? demoOrigin), latitudeDelta: 0.055, longitudeDelta: 0.055 }}
       showsUserLocation={!config.demo && !!fix} showsMyLocationButton={false} showsCompass={false}
       onPanDrag={() => setFollowing(false)}
-      onLongPress={event => { if (!navigating && gpsReady && !config.demo) chooseDestination({ id: 'pin', name: ui.pin, coordinate: event.nativeEvent.coordinate }); }}>
+      onLongPress={event => { if (!navigating) chooseDestination({ id: 'pin', name: ui.pin, coordinate: event.nativeEvent.coordinate }); }}>
       {route && <Polyline coordinates={route.geometry} strokeColor="#FFFFFF" strokeWidth={11} />}
       {route && <Polyline coordinates={route.geometry} strokeColor="#087F72" strokeWidth={6} />}
       {destination && <Marker coordinate={destination.coordinate} title={destination.name} pinColor="#E87543" />}
@@ -249,7 +256,7 @@ export default function NavigationScreen() {
       </View>
       <View style={styles.bottom} onLayout={event => setBottomHeight(event.nativeEvent.layout.height)}>
         <ScrollView style={styles.bottomScroll} contentContainerStyle={styles.bottomContent}>
-          {!navigating && <FavoritePlaces target={destination} disabled={!gpsReady || busy} onChoose={chooseDestination} />}
+          {!navigating && <FavoritePlaces target={destination} disabled={busy} onChoose={chooseDestination} />}
           {!destination && <><Text style={styles.heading}>{ui.search}</Text><Text style={styles.note}>{ui.mapHint}</Text>
             {config.demo && <Button title={ui.chooseDemo} onPress={() => chooseDestination(demoDestination)} />}</>}
           {busy && <View style={styles.loading}><ActivityIndicator color="#087F72" /><Text style={styles.note}>{ui.calculating}</Text></View>}

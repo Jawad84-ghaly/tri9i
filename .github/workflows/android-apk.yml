@@ -13,6 +13,14 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/android-apk.yml'
+      - 'components/**'
+      - 'screens/**'
+      - 'services/**'
+      - 'constants/**'
+      - 'hooks/**'
+      - 'app.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read
@@ -22,7 +30,7 @@ env:
 
 concurrency:
   group: android-apk-demo
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
