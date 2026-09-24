@@ -20,9 +20,13 @@ export function validAlerts(alerts: RoadAlert[], now = Date.now()): RoadAlert[] 
     && a.expiresAt > a.createdAt).map(a => [a.id, a])).values()];
 }
 export async function fetchAlerts(center: Coordinate, signal?: AbortSignal): Promise<RoadAlert[]> {
-  const body = z.object({ alerts: z.array(alertSchema).max(2000) }).parse(
+  return (await fetchAlertSnapshot(center, signal)).alerts;
+}
+export async function fetchAlertSnapshot(center: Coordinate, signal?: AbortSignal) {
+  const body = z.object({ alerts: z.array(alertSchema).max(2000), partnerEnabled: z.boolean().optional(), partnerHealthy: z.boolean().optional() }).parse(
     await jsonRequest(serverUrl(`/alerts?bbox=${bounds(center)}`), {}, signal));
-  return validAlerts(body.alerts);
+  const partner: 'disabled' | 'live' | 'offline' = body.partnerEnabled ? (body.partnerHealthy ? 'live' : 'offline') : 'disabled';
+  return { alerts: validAlerts(body.alerts), partner };
 }
 export async function reportAlert(kind: AlertKind, coordinate: Coordinate): Promise<RoadAlert> {
   if (!session || session.expiresAt < Date.now() + 5000) {

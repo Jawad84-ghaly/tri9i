@@ -13,6 +13,9 @@ test('community: authenticate, validate, share across clients, filter and expire
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
+    const health = await (await fetch(`${base}/health`)).json();
+    assert.equal(health.partnerEnabled, false);
+    assert.equal(health.partnerHealthy, false);
     const data = { kind: 'accident', coordinate: { latitude: 33.59, longitude: -7.62 } };
     assert.equal((await fetch(`${base}/alerts`, { method: 'POST', body: JSON.stringify(data) })).status, 401);
     const auth = await (await fetch(`${base}/session`, { method: 'POST' })).json();

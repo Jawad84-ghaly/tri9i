@@ -27,7 +27,7 @@ async function readBody(request) {
 // Runnable single-instance backend. Sessions remain anonymous and temporary.
 export function createAlertServer({ clock = Date.now, feedUrl = '', storageFile = '' } = {}) {
   const reports = reportStore(storageFile, clock), sessions = new Map(), limits = new Map();
-  let partnerAlerts = [], partnerHealthy = !feedUrl;
+  let partnerAlerts = [], partnerHealthy = false;
   function prune(now) {
     reports.prune(now);
     for (const [id, session] of sessions) if (session.expiresAt <= now) sessions.delete(id);
@@ -49,7 +49,7 @@ export function createAlertServer({ clock = Date.now, feedUrl = '', storageFile 
     try {
       const url = new URL(request.url ?? '/', 'http://localhost');
       if (request.method === 'GET' && url.pathname === '/health') {
-        return send(response, 200, { ok: true, storage: storageFile ? 'file' : 'memory', partnerHealthy });
+        return send(response, 200, { ok: true, storage: storageFile ? 'file' : 'memory', partnerEnabled: !!feedUrl, partnerHealthy });
       }
       if (request.method === 'POST' && url.pathname === '/session') {
         if (sessions.size >= 10_000 || rateLimit(ip, 'session', 10, now)) return send(response, 429, { error: 'RATE_LIMIT' });
@@ -67,7 +67,7 @@ export function createAlertServer({ clock = Date.now, feedUrl = '', storageFile 
         }
         const alerts = [...reports.values(), ...partnerAlerts].filter(({ coordinate: p }) =>
           p.longitude >= box[0] && p.longitude <= box[2] && p.latitude >= box[1] && p.latitude <= box[3]).slice(-2000);
-        return send(response, 200, { alerts, updatedAt: now, partnerHealthy });
+        return send(response, 200, { alerts, updatedAt: now, partnerEnabled: !!feedUrl, partnerHealthy });
       }
       if (request.method === 'POST' && url.pathname === '/alerts') {
         const token = request.headers.authorization?.startsWith('Bearer ') ? request.headers.authorization.slice(7) : undefined;

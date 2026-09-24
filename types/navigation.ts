@@ -14,5 +14,5 @@ export type Route = {
   tollFree: boolean; fuelLiters: number; trafficAvailable: boolean; alerts: RoadAlert[];
   fetchedAt: number;
 };
-export type RouteOption = { mode: RouteMode; route: Route | null; sameAs?: RouteMode };
+export type RouteOption = { mode: RouteMode; route: Route | null; sameAs?: RouteMode; tollsPossible?: boolean };
 export type Destination = { id: string; name: string; coordinate: Coordinate };

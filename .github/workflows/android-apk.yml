@@ -1,7 +1,14 @@
-name: Android APK demo
+name: Android APK
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'demo = simulation; live = GPS réel avec services configurés'
+        type: choice
+        required: true
+        default: demo
+        options: [demo, live]
   push:
     branches: [main]
     paths:
@@ -9,6 +16,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  BUILD_MODE: ${{ inputs.mode || 'demo' }}
 
 concurrency:
   group: android-apk-demo
@@ -19,8 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      EXPO_PUBLIC_DEMO_MODE: 'true'
+      EXPO_PUBLIC_DEMO_MODE: ${{ inputs.mode == 'live' && 'false' || 'true' }}
       EXPO_PUBLIC_MAP_PROVIDER: osm
+      EXPO_PUBLIC_MAPBOX_TOKEN: ${{ inputs.mode == 'live' && secrets.EXPO_PUBLIC_MAPBOX_TOKEN || '' }}
+      EXPO_PUBLIC_ALERTS_URL: ${{ inputs.mode == 'live' && vars.EXPO_PUBLIC_ALERTS_URL || '' }}
       CI: '1'
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +46,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Verify live service configuration
+        if: inputs.mode == 'live'
+        run: |
+          node --input-type=module <<'JS'
+          if (!process.env.EXPO_PUBLIC_MAPBOX_TOKEN?.startsWith('pk.')) throw new Error('Configure the public Mapbox token before a live build.');
+          const base = process.env.EXPO_PUBLIC_ALERTS_URL;
+          if (!base || new URL(base).protocol !== 'https:') throw new Error('Configure the HTTPS alert server before a live build.');
+          const response = await fetch(base.replace(/\/$/, '') + '/health', { signal: AbortSignal.timeout(15000) });
+          if (!response.ok || !(await response.json()).ok) throw new Error('Alert server health check failed.');
+          JS
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify source
@@ -44,18 +66,18 @@ jobs:
           pnpm run test:connection
       - name: Generate managed Android project
         run: pnpm exec expo prebuild --platform android --no-install
-      - name: Compile standalone demo APK
+      - name: Compile standalone APK
         working-directory: android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --no-daemon --max-workers=2
       - name: Collect APK and checksum
         run: |
           mkdir -p apk
-          cp android/app/build/outputs/apk/release/app-release.apk apk/tri9i-demo.apk
+          cp android/app/build/outputs/apk/release/app-release.apk "apk/tri9i-$BUILD_MODE.apk"
           cd apk
-          sha256sum tri9i-demo.apk > SHA256SUMS.txt
+          sha256sum "tri9i-$BUILD_MODE.apk" > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: tri9i-demo-apk
+          name: tri9i-apk
           path: apk/*
           if-no-files-found: error
           retention-days: 30
@@ -67,7 +89,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: tri9i-demo-apk
+          name: tri9i-apk
           path: apk
       - name: Publish downloadable test build
         env:
@@ -76,6 +98,11 @@ jobs:
           BUILD_SHA: ${{ github.sha }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          gh release create "demo-$BUILD_NUMBER" apk/tri9i-demo.apk apk/SHA256SUMS.txt \
-            --target "$BUILD_SHA" --title "Tri9i — APK de démonstration $BUILD_NUMBER" --latest \
-            --notes "APK autonome de test Android ARM, sans Expo Go ni serveur Metro. Carte OpenStreetMap avec Internet. Parcours et alertes simulés à Casablanca, interface et voix en Darija. Aucune donnée de trafic réelle ni clé Mapbox intégrée. Signature de développement générée par le projet Expo : ne pas utiliser comme version de production. Les mises à jour peuvent demander de désinstaller la démo précédente."
+          if [ "$BUILD_MODE" = live ]; then
+            NOTES="GPS réel, recherche et itinéraires Mapbox, alertes du serveur configuré. Waze uniquement si un flux partenaire autorisé est raccordé au serveur. Trafic selon couverture du fournisseur. Favoris locaux : maison, travail, école, sport et lieux personnalisés."
+          else
+            NOTES="Démonstration simulée à Casablanca avec favoris locaux : maison, travail, école, sport et lieux personnalisés. Pas de trafic réel ni de flux Waze/Google Maps actif. Le mode live attend les accès fournisseur et le serveur HTTPS."
+          fi
+          gh release create "$BUILD_MODE-$BUILD_NUMBER" "apk/tri9i-$BUILD_MODE.apk" apk/SHA256SUMS.txt \
+            --target "$BUILD_SHA" --title "Tri9i — APK $BUILD_MODE $BUILD_NUMBER" --latest \
+            --notes "$NOTES APK autonome Android ARM, sans Expo Go ni Metro. Carte OpenStreetMap en ligne. Signature de développement, version de test : une mise à jour peut demander de désinstaller la version précédente, ce qui efface les favoris locaux."

@@ -24,8 +24,10 @@ describe('routing criteria', () => {
     const options = selectOptions([route('one', 2000, 90)], []);
     expect(options).toHaveLength(3); expect(options[1]?.route).toBeNull(); expect(options[2]?.sameAs).toBe('fastest');
   });
-  it('rejects routes violating toll exclusion', () => {
-    expect(selectOptions([], [route('toll', 1000, 80, false)])[1]?.route).toBeNull();
+  it('warns when the avoidance query can only return a toll route', () => {
+    const option = selectOptions([], [route('toll', 1000, 80, false)])[1];
+    expect(option?.route?.tollFree).toBe(false); expect(option?.tollsPossible).toBe(true);
+    expect(selectOptions([], [route('toll', 1000, 80, false), route('free', 3000, 180, true)])[1]?.route?.id).toBe('free');
   });
   it('sends longitude first, requests toll exclusion, and parses API response', async () => {
     config.mapboxToken = 'pk.test';
@@ -51,7 +53,8 @@ describe('routing criteria', () => {
         steps: [{ distance: 0, geometry: { coordinates: [[-7, 33.01]] },
           maneuver: { location: [-7, 33.01], type: 'arrive' } }] }] }] };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => raw }));
-    expect((await calculateRoutes(a, b))[1]?.route).toBeNull();
+    const option = (await calculateRoutes(a, b))[1];
+    expect(option?.route?.tollFree).toBe(false); expect(option?.tollsPossible).toBe(true);
   });
 });
 describe('navigation and alerts', () => {

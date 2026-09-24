@@ -37,7 +37,7 @@ export function routeFingerprint(route: Route): string {
 function normalize(raw: RawRoute, tollExcluded: boolean, traffic: boolean): Route {
   const now = Date.now(), line = raw.geometry.coordinates.map(coord);
   const steps = raw.legs.flatMap(leg => leg.steps);
-  // Exclude=toll can still produce a route violating the exclusion; reject these.
+  // Exclude=toll can still violate the exclusion: never mark these as toll-free.
   const hasToll = steps.some(s => s.intersections?.some(i => i.classes?.includes('toll')))
     || raw.legs.some(leg => leg.notifications?.some(n => n.type === 'violation' && n.subtype === 'toll'));
   const alerts: RoadAlert[] = [];
@@ -66,9 +66,14 @@ function normalize(raw: RawRoute, tollExcluded: boolean, traffic: boolean): Rout
 export function selectOptions(regular: Route[], tollFree: Route[]): RouteOption[] {
   const all = [...regular, ...tollFree];
   const min = (items: Route[], score: (r: Route) => number) => [...items].sort((a, b) => score(a) - score(b))[0] ?? null;
+  // Prefer an actual toll-free result. If exclusion could not be satisfied, only
+  // consider the avoidance query, and explicitly warn that tolls remain possible.
+  // Mapbox does not supply toll prices: this cannot promise the cheapest toll bill.
+  const economical = min(tollFree.filter(r => r.tollFree), r => r.fuelLiters)
+    ?? min(tollFree, r => r.fuelLiters);
   const options: RouteOption[] = [
     { mode: 'fastest', route: min(all, r => r.duration) },
-    { mode: 'economical', route: min(tollFree.filter(r => r.tollFree), r => r.fuelLiters) },
+    { mode: 'economical', route: economical, tollsPossible: !!economical && !economical.tollFree },
     // Mapbox optimizes travel time. This is only the shortest returned candidate.
     { mode: 'shortest', route: min(all, r => r.distance) },
   ];

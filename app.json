@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "طريقي", "slug": "tri9i-darija", "version": "1.0.0",
+    "name": "طريقي", "slug": "tri9i-darija", "version": "1.1.0",
     "orientation": "portrait", "userInterfaceStyle": "light", "scheme": "tri9i", "platforms": ["ios", "android"],
     "ios": { "supportsTablet": true, "bundleIdentifier": "ma.tri9i.navigation" },
-    "android": { "package": "ma.tri9i.navigation", "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"] },
+    "android": { "package": "ma.tri9i.navigation", "versionCode": 2, "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"] },
     "plugins": [["expo-location", {
       "locationWhenInUsePermission": "خلّي طريقي يعرف فين نتا باش يورّيك الطريق.",
       "isIosBackgroundLocationEnabled": false, "isAndroidBackgroundLocationEnabled": false

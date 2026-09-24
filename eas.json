@@ -7,6 +7,12 @@
       "android": { "buildType": "apk" },
       "env": { "EXPO_PUBLIC_DEMO_MODE": "true", "EXPO_PUBLIC_MAP_PROVIDER": "osm" }
     },
+    "live": {
+      "distribution": "internal",
+      "developmentClient": false,
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_DEMO_MODE": "false", "EXPO_PUBLIC_MAP_PROVIDER": "osm" }
+    },
     "production": { "autoIncrement": true }
   }
 }

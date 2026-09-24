@@ -1,5 +1,9 @@
 # Vérifications de la livraison
 
+## Version 1.1 — 24 septembre 2026
+
+TypeScript strict réussi ; 16 tests mobiles (dont 4 sur la persistance des favoris), 4 tests serveur et 2 tests de connexion réussis. L'option économique préfère l'absence de péage et avertit explicitement lorsqu'une requête d'évitement retourne des péages. Un serveur communautaire sans flux partenaire annonce maintenant Waze désactivé, jamais connecté. Le workflow live exige un jeton Mapbox public et un serveur HTTPS joignable ; aucun accès fournisseur ni hébergement live n'est configuré au moment de ces vérifications. Les favoris sur appareil, les API authentifiées et les trajets GPS réels restent à valider sur téléphone.
+
 Vérifié le 18 septembre 2026, sous Windows avec Node.js 24.19.0.
 
 | Vérification | Résultat |

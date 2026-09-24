@@ -8,7 +8,7 @@ Le projet est une **base fonctionnelle à tester**, avec démonstration simulée
 
 ### APK Android autonome
 
-Le workflow GitHub **Android APK demo** compile une version de test ARM 32/64 bits et publie `tri9i-demo.apk` dans les Releases après réussite des tests. Il peut être relancé depuis l'onglet Actions. L'APK embarque son JavaScript : aucun Expo Go, QR ni serveur Metro n'est nécessaire. C'est une démonstration simulée, pas encore une version validée pour la conduite réelle.
+Le workflow GitHub **Android APK** compile une version de test ARM 32/64 bits et publie `tri9i-demo.apk` dans les Releases après réussite des tests. Il peut être relancé depuis l'onglet Actions. L'APK embarque son JavaScript : aucun Expo Go, QR ni serveur Metro n'est nécessaire. Le choix par défaut reste une démonstration simulée ; le profil live nécessite la configuration décrite plus bas.
 
 Cette compilation active `EXPO_PUBLIC_MAP_PROVIDER=osm` : une carte OpenStreetMap en 2D orientée au nord, sans clé Google. Internet reste nécessaire pour les tuiles et Leaflet 1.9.4 (CDN avec vérification d'intégrité). Les marqueurs, alertes, zoom, déplacement et suivi sont disponibles. En cas de panne de carte, un message permet de réessayer. L'attribution reste visible au-dessus des commandes.
 
@@ -43,6 +43,21 @@ Le lanceur limite l'accès au PC par défaut. Pour autoriser explicitement l'acc
 Le lanceur détecte l'adresse Wi-Fi actuelle et attend un manifeste Expo valide avant de générer `.local/qr.png` et `.local/connection.json`. Scanner le nouveau QR dans **Expo Go → Scan QR code** sur Android. Garder le lanceur ouvert : une image QR n'héberge pas l'application et ne reste pas valable après changement de réseau ou arrêt du serveur. Pour diagnostiquer le réseau, ouvrir `http://ADRESSE_DU_PC:8081/status` dans le navigateur du téléphone : la réponse attendue est `packager-status:running`. Si cette page ne répond pas, vérifier le Wi-Fi commun, le VPN et l'isolation des appareils par le routeur avant de rescanner. Le lanceur ne modifie pas le pare-feu et n'ouvre pas de tunnel public.
 
 ## Passer au GPS réel
+
+### Favoris et activation live (version 1.1)
+
+Après sélection d'une destination, utiliser « سجّل هاد البلاصة ». Catégories : maison, travail, école, salle de sport et lieux personnalisés. Les favoris sont conservés sur le téléphone, rechargés au démarrage et ne sont pas envoyés au serveur d'alertes. Toucher un favori pour le choisir comme destination. Les emplacements maison/travail/école/sport peuvent être remplacés avec confirmation ; les autres lieux sont multiples (50 favoris maximum). Suppression avec confirmation. Une désinstallation peut effacer ces données : il n'y a pas encore de synchronisation de compte.
+
+**Le profil live est préparé, mais aucune clé ni aucun serveur de production n'est fourni automatiquement.** Pour produire l'APK réel depuis GitHub :
+
+1. Configurer le secret de dépôt `EXPO_PUBLIC_MAPBOX_TOKEN` avec un jeton **public** `pk.*` autorisé pour Directions et Geocoding. Ce jeton est incorporé à l'APK ; ne jamais fournir de jeton privé `sk.*`.
+2. Déployer le serveur communautaire sur un hébergement HTTPS avec stockage persistant et les protections d'exploitation décrites plus bas. Configurer la variable de dépôt `EXPO_PUBLIC_ALERTS_URL` avec son adresse. L'URL ne doit contenir aucun identifiant.
+3. Pour Waze, obtenir un accès partenaire et les droits de redistribution couvrant l'usage mobile ; placer `WAZE_FEED_URL` uniquement sur le serveur. Les types et la couverture dépendent du contrat. Aucune extraction de l'application Waze ou Google Maps n'est réalisée. Google Routes fournit des options de trafic, pas ici un accès aux signalements communautaires Google Maps.
+4. Dans **Actions → Android APK → Run workflow**, choisir **live**. Une clé absente ou un serveur indisponible arrête la compilation au lieu de publier une simulation sous le nom « live ». Le fichier publié s'appelle `tri9i-live.apk`. Le choix **demo**, utilisé par défaut, reste une simulation clairement identifiée.
+
+Le mode live active la position réelle et les appels réseau existants. L'état Waze est séparé de la disponibilité du serveur communautaire : un serveur joignable ne signifie pas que Waze est connecté. Les incidents Mapbox proviennent des réponses de trajet et leur disponibilité dépend de la couverture locale. Aucune donnée réelle fournisseur ni validation routière n'est confirmée tant que les accès et essais ne sont pas réalisés.
+
+Références : [accès partenaire Waze](https://support.google.com/waze/partners/answer/10618035?hl=en), [trafic Google Routes](https://developers.google.com/maps/documentation/routes/traffic-opt), [Mapbox Directions](https://docs.mapbox.com/api/navigation/directions/).
 
 ### Si le téléphone ne peut pas joindre le PC en Wi-Fi
 
@@ -93,10 +108,10 @@ Configurer les mêmes variables dans l'environnement EAS utilisé par le build. 
 | Choix affiché | Calcul réel | Limite indiquée |
 | --- | --- | --- |
 | Le plus rapide | Durée minimale parmi les candidats reçus, profil trafic | Données historiques/live selon disponibilité locale ; aucune garantie de couverture live au Maroc |
-| Le plus économique | Meilleure estimation de carburant parmi les candidats demandés sans péages, sans intersection `toll` ni notification de violation de cette exclusion | Modèle indicatif : 6,5 L/100 km + 0,6 L/heure ; pas de prix du carburant ni modèle moteur/pente |
+| Le plus économique | Priorité aux résultats sans péage ; sinon résultat de la requête d'évitement avec avertissement de péages possibles. Classement par carburant estimé | Modèle indicatif : 6,5 L/100 km + 0,6 L/heure ; prix des péages inconnus, coût minimal non garanti |
 | Le plus court | Distance minimale parmi tous les candidats reçus | Ne garantit pas le minimum global sur le réseau routier |
 
-Toujours trois **cartes de critères**, pas trois tracés forcément différents. Un parcours identique est étiqueté. Si aucun trajet sans péage n'est disponible, son option est désactivée : on ne présente pas un trajet à péage comme économique. Si toutes les requêtes échouent, une erreur s'affiche ; aucun tracé démo n'est injecté.
+Toujours trois **cartes de critères**, pas trois tracés forcément différents. Un parcours identique est étiqueté. Le mode économique privilégie les résultats réellement sans péage. Si la requête d'évitement retourne seulement un trajet comportant des péages, un avertissement indique les péages possibles et les tarifs inconnus. On ne garantit ni un nombre inférieur de barrières ni une facture plus faible. Si cette requête échoue, l'option est désactivée. Si toutes les requêtes échouent, une erreur s'affiche ; aucun tracé démo n'est injecté.
 
 Pour garantir un vrai plus court chemin, il faudrait ajouter un moteur dont la pondération est explicitement la distance sur le graphe routier. Le profil automobile standard d'OSRM ne garantit pas non plus cet objectif, et le serveur public OSRM n'apporte pas de trafic live. Ce projet préfère annoncer cette limite plutôt que présenter des alternatives rapides comme un optimum mathématique.
 

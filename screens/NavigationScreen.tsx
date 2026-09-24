@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { OpenStreetMap } from '../components/OpenStreetMap';
+import { FavoritePlaces } from '../components/FavoritePlaces';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -89,7 +90,7 @@ export default function NavigationScreen() {
       if (initial) setMode('fastest');
       return !selectedMissing;
     } catch {
-      if (!controller.signal.aborted) { setStale(!initial); setMessage(ui.network); }
+      if (!controller.signal.aborted) { setStale(!initial); setMessage(!config.demo && !config.mapboxToken.startsWith('pk.') ? ui.config : ui.network); }
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }, []);
 
@@ -248,6 +249,7 @@ export default function NavigationScreen() {
       </View>
       <View style={styles.bottom} onLayout={event => setBottomHeight(event.nativeEvent.layout.height)}>
         <ScrollView style={styles.bottomScroll} contentContainerStyle={styles.bottomContent}>
+          {!navigating && <FavoritePlaces target={destination} disabled={!gpsReady || busy} onChoose={chooseDestination} />}
           {!destination && <><Text style={styles.heading}>{ui.search}</Text><Text style={styles.note}>{ui.mapHint}</Text>
             {config.demo && <Button title={ui.chooseDemo} onPress={() => chooseDestination(demoDestination)} />}</>}
           {busy && <View style={styles.loading}><ActivityIndicator color="#087F72" /><Text style={styles.note}>{ui.calculating}</Text></View>}
@@ -257,6 +259,7 @@ export default function NavigationScreen() {
               <View style={styles.routeHeading}><Text style={styles.routeTitle}>{modeLabels[option.mode]}</Text><Text style={styles.radio}>{mode === option.mode ? '●' : '○'}</Text></View>
               <Text style={styles.routeMetrics}>{option.route ? `${Math.ceil(option.route.duration / 60)} ${ui.minutes}  ·  ${(option.route.distance / 1000).toFixed(1)} ${ui.km}  ·  ${option.route.fuelLiters.toFixed(1)} ${ui.liters}` : ui.unavailable}</Text>
               {option.sameAs && <Text style={styles.note}>{ui.same} {modeLabels[option.sameAs]}</Text>}
+              {option.mode === 'economical' && option.route && <Text style={option.tollsPossible ? styles.warning : styles.note}>{option.tollsPossible ? ui.tollsPossible : ui.tollFree}</Text>}
             </Pressable>)}
             <Text style={styles.note}>{mode === 'shortest' ? ui.shortestNote : mode === 'economical' ? ui.economyNote : ui.background}</Text>
           </>}
@@ -267,6 +270,8 @@ export default function NavigationScreen() {
           {stale && <Text style={styles.warning}>{ui.stale}</Text>}
           {!!voiceStatus && <Text style={styles.note}>{voiceStatus}</Text>}
           <Text style={styles.note}>{community.status === 'live' ? ui.alertsLive : community.status === 'disabled' ? ui.alertsDisabled : ui.alertsOffline}</Text>
+          {!config.demo && <Text style={styles.note}>{community.partner === 'live' ? 'معطيات Waze مربوطة' : community.partner === 'offline' ? 'معطيات Waze ما تحدّثوش' : 'معطيات Waze ما مربوطاش'}</Text>}
+          {allAlerts.some(alert => alert.source === 'waze') && <Text style={styles.attribution} onPress={() => { void Linking.openURL('https://waze.com').catch(() => setMessage(ui.network)); }}>Data by Waze App. https://waze.com</Text>}
           <View style={styles.actions}>
             {route && <View style={styles.action}><Button title={navigating ? ui.stop : ui.start} disabled={!navigating && (busy || !gpsReady)} onPress={navigating ? stop : start} /></View>}
             <View style={styles.action}><Button title={ui.report} secondary disabled={!gpsReady || (!config.demo && !config.alertsUrl)} onPress={() => setReportOpen(true)} /></View>
