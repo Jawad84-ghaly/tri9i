@@ -4,6 +4,14 @@ Application GPS Android/iOS en React Native, Expo Managed et TypeScript. Interfa
 
 Le projet est une **base fonctionnelle à tester**, avec démonstration simulée et intégrations réseau réelles. Ce n'est pas un remplacement validé de Waze : les tests sur appareil, la validation routière et l'exploitation d'un service communautaire public restent à réaliser.
 
+## Version 1.2 : langues, voix et changement de trajet
+
+**Mise en ligne : suivre [ONLINE.md](ONLINE.md)** pour connecter Mapbox, créer le serveur HTTPS avec Render et compiler le vrai mode `live`. Le fichier `render.yaml` fournit un pilote gratuit avec mise en veille et stockage temporaire ; aucun hébergement n'est créé simplement en publiant ce fichier.
+
+L'écran **اللغة والصوت / Langue et voix** propose Darija marocaine (par défaut), français et anglais, sélection des voix installées, écoute d'un exemple et activation de l'humour. Ces préférences sont conservées sur le téléphone. Les nouvelles plaisanteries tournent entre les événements, jamais au détriment d'une consigne de manœuvre. Les voix système arabes ne garantissent pas un accent marocain naturel ; le repli est affiché.
+
+Pendant le guidage, **بدّل الطريق / Changer de trajet** conserve la destination et recalcule depuis la position GPS actuelle. On peut garder le critère actuel et chercher une autre route, ou choisir rapide/économique/court avec péages automatiques, interdits ou autorisés. **Sans péage** refuse un résultat signalant une violation, même si aucune route n'est alors disponible. **Péages autorisés** ne force pas une autoroute payante et n'en connaît pas le prix. La préférence réussie reste appliquée aux prochains recalculs. Si la recherche échoue ou ne trouve pas d'autre route, le trajet et les critères actuels restent inchangés. Les alternatives dépendent du fournisseur et d'une comparaison géométrique (pas de garantie d'éviter tout bouchon). Le bouton se manipule à l'arrêt ou par un passager ; aucune commande vocale n'est intégrée.
+
 ## Démarrer en mode démonstration
 
 ### APK Android autonome

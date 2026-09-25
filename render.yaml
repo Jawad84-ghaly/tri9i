@@ -1,0 +1,17 @@
+# Free ONLINE PILOT, not an always-on production service.
+# Render free services sleep and lose their local storage on restart.
+services:
+  - type: web
+    name: tri9i-alerts
+    runtime: node
+    plan: free
+    buildCommand: npx --yes pnpm@11.19.0 install --frozen-lockfile
+    startCommand: node server/index.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: ALERTS_STORAGE_FILE
+        value: "/tmp/tri9i-alerts.json"

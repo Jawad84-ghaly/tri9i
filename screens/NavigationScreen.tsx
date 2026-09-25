@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { OpenStreetMap } from '../components/OpenStreetMap';
 import { FavoritePlaces } from '../components/FavoritePlaces';
+import { PreferencesSheet } from '../components/PreferencesSheet';
+import { labels } from '../constants/settingsLabels';
+import { setLanguage } from '../constants/language';
+import { defaults, loadPreferences, savePreferences, type Preferences } from '../services/preferencesService';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -11,7 +15,7 @@ import { demoDestination, demoOptions, demoOrigin, demoPosition } from '../data/
 import { useForeground, useLocation } from '../hooks/useLocation';
 import { useAlerts } from '../hooks/useAlerts';
 import { reportAlert, validAlerts } from '../services/alertsService';
-import { calculateRoutes } from '../services/routingService';
+import { calculateRoutes, chooseRequestedOptions, type TollPolicy } from '../services/routingService';
 import { searchDestinations } from '../services/searchService';
 import { speech } from '../services/speechService';
 import type { AlertKind, Destination, RoadAlert, RouteMode, RouteOption } from '../types/navigation';
@@ -44,6 +48,13 @@ export default function NavigationScreen() {
   const [stale, setStale] = useState(false);
   const [muted, setMuted] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState('');
+  const [preferences, setPreferences] = useState(defaults);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [draftMode, setDraftMode] = useState<RouteMode>('fastest');
+  const [tollPolicy, setTollPolicy] = useState<TollPolicy>('automatic');
+  const tollRef = useRef(tollPolicy); tollRef.current = tollPolicy;
+  const [draftTolls, setDraftTolls] = useState<TollPolicy>('automatic');
   const [reportOpen, setReportOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -55,13 +66,21 @@ export default function NavigationScreen() {
   const lastReroute = useRef(0), offRouteCount = useRef(0), spoken = useRef('');
   const demoElapsed = useRef(0);
   const route = options.find(option => option.mode === mode)?.route ?? null;
+  const routeRef = useRef(route); routeRef.current = route;
+  const interactionRef = useRef(false); interactionRef.current = busy || changeOpen;
   const gpsReady = !gpsError && !!fix && (config.demo || (fix.accuracy <= 60 && now - fix.timestamp < 20_000));
   const allAlerts = useMemo(() => validAlerts([...community.alerts, ...(route?.alerts ?? [])], now), [community.alerts, route, now]);
   const guidance = useMemo(() => route && fix ? guidanceAt(route, fix) : null, [route, fix]);
 
   useEffect(() => {
     let mounted = true;
-    void speech.initialize().then(status => { if (mounted) setVoiceStatus(status === 'missing' ? ui.noVoice : status === 'arabic' ? ui.voiceFallback : ''); });
+    void loadPreferences().then(async value => {
+      if (!mounted) return;
+      setLanguage(value.language); setPreferences(value);
+      const status = await speech.initialize(value);
+      if (mounted) setVoiceStatus(status === 'missing' ? ui.noVoice : status === 'arabic' ? ui.voiceFallback : '');
+    }).catch(() => { if (mounted) { setMessage(labels.saveFailed); void speech.initialize(defaults); } })
+      .finally(() => { if (mounted) setPreferencesReady(true); });
     const timer = setInterval(() => setNow(Date.now()), 5000);
     return () => { mounted = false; clearInterval(timer); speech.stop(); searchRequest.current?.abort(); routeRequest.current?.abort(); };
   }, []);
@@ -72,12 +91,20 @@ export default function NavigationScreen() {
     }
   }, [foreground]);
 
-  const loadRoutes = useCallback(async (target: Destination, initial: boolean) => {
+  async function updatePreferences(value: Preferences) {
+    await savePreferences(value);
+    setLanguage(value.language); setPreferences(value); setMessage(''); spoken.current = '';
+    const status = await speech.initialize(value);
+    speech.setEnabled(!muted && foregroundRef.current);
+    setVoiceStatus(status === 'missing' ? ui.noVoice : status === 'arabic' ? ui.voiceFallback : '');
+  }
+  const loadRoutes = useCallback(async (target: Destination, initial: boolean,
+    change?: { mode: RouteMode; tollPolicy: TollPolicy; alternative: boolean }) => {
     // Allow saving any pinned place in demo mode, but never draw the Casablanca
     // fixture as if it reached a real home/work location elsewhere.
     if (config.demo && (target.coordinate.latitude !== demoDestination.coordinate.latitude
         || target.coordinate.longitude !== demoDestination.coordinate.longitude)) {
-      setOptions([]); setMessage('تقدر تسجّل هاد البلاصة. باش نحسبو الطريق ليها خاص تفعيل الخدمة الحقيقية.'); return false;
+      setOptions([]); setMessage(labels.demoPin); return false;
     }
     const origin = fixRef.current;
     if (!origin || (!config.demo && (origin.accuracy > 60 || Date.now() - origin.timestamp > 20_000))) return;
@@ -86,15 +113,23 @@ export default function NavigationScreen() {
     setBusy(true);
     if (initial) { setMessage(''); setOptions([]); setNavigating(false); }
     try {
-      const choices = config.demo ? demoOptions() : await calculateRoutes(origin, target.coordinate, controller.signal);
+      const requestedMode = change?.mode ?? (initial ? 'fastest' : modeRef.current);
+      const policy = change?.tollPolicy ?? (initial ? 'automatic' : tollRef.current);
+      const request = { tollPolicy:policy, alternativeTo:change?.alternative ? routeRef.current ?? undefined : undefined };
+      const fixtures = config.demo ? demoOptions().flatMap(o => o.route ? [o.route] : []) : [];
+      const choices = config.demo ? chooseRequestedOptions(fixtures.filter(r => !r.tollFree), fixtures.filter(r => r.tollFree), request)
+        : await calculateRoutes(origin, target.coordinate, controller.signal, request);
       if (controller.signal.aborted) return;
-      const selectedMissing = !initial && !choices.find(choice => choice.mode === modeRef.current)?.route;
-      // Keep the last selected route if its criterion temporarily becomes unavailable.
-      setOptions(previous => choices.map(choice => selectedMissing && choice.mode === modeRef.current
-        ? previous.find(old => old.mode === choice.mode) ?? choice : choice));
-      setStale(selectedMissing); setMessage(''); spoken.current = ''; offRouteCount.current = 0;
-      if (initial) setMode('fastest');
-      return !selectedMissing;
+      if (!choices.find(choice => choice.mode === requestedMode)?.route && !initial) {
+        if (!change) setStale(true);
+        setMessage(change?.alternative ? labels.noAlternative : labels.noRoute); return false;
+      }
+      // Commit route, criterion and toll preference together, only after success.
+      setOptions(choices); setMode(requestedMode); modeRef.current = requestedMode;
+      setTollPolicy(policy); tollRef.current = policy;
+      setStale(false); setMessage(change ? labels.changed : ''); spoken.current = ''; offRouteCount.current = 0;
+      if (change) { speech.stop(); setFollowing(true); }
+      return true;
     } catch {
       if (!controller.signal.aborted) { setStale(!initial); setMessage(!config.demo && !config.mapboxToken.startsWith('pk.') ? ui.config : ui.network); }
     } finally { if (!controller.signal.aborted) setBusy(false); }
@@ -142,7 +177,7 @@ export default function NavigationScreen() {
   useEffect(() => {
     if (!navigating || !foreground || config.demo) return;
     const timer = setInterval(() => {
-      if (targetRef.current) void loadRoutes(targetRef.current, false);
+      if (targetRef.current && !interactionRef.current) void loadRoutes(targetRef.current, false);
     }, config.trafficRefreshMs);
     return () => clearInterval(timer);
   }, [navigating, foreground, loadRoutes]);
@@ -151,11 +186,11 @@ export default function NavigationScreen() {
     if (!navigating || !foreground || !gpsReady || !guidance || !fix || !route) return;
     if (guidance.arrived) {
       routeRequest.current?.abort(); setBusy(false);
-      speech.event('arrived'); setMessage(eventPrompt('arrived')); setNavigating(false); return;
+      speech.event('arrived'); setMessage(eventPrompt('arrived', preferences.humor)); setNavigating(false); setChangeOpen(false); return;
     }
     if (guidance.distance > 80 && !config.demo) {
       offRouteCount.current++;
-      if (offRouteCount.current >= 3 && Date.now() - lastReroute.current > 30_000 && !busy && destination) {
+      if (offRouteCount.current >= 3 && Date.now() - lastReroute.current > 30_000 && !interactionRef.current && destination) {
         lastReroute.current = Date.now(); speech.event('rerouting'); void loadRoutes(destination, false);
       }
       return;
@@ -176,7 +211,11 @@ export default function NavigationScreen() {
   }, [fix, navigating, foreground, route]);
 
   function stop() {
-    routeRequest.current?.abort(); setBusy(false); setNavigating(false); speech.stop();
+    routeRequest.current?.abort(); setBusy(false); setNavigating(false); setChangeOpen(false); speech.stop();
+  }
+  async function changeRoute(alternative: boolean) {
+    if (!destination || busy || !gpsReady) return;
+    if (await loadRoutes(destination, false, { mode:draftMode, tollPolicy:draftTolls, alternative })) setChangeOpen(false);
   }
   async function start() {
     if (!route || !gpsReady || !fix || busy) return;
@@ -200,7 +239,7 @@ export default function NavigationScreen() {
   }
   function showAlert(alert: RoadAlert) {
     const source = { community: ui.sourceCommunity, mapbox: ui.sourceMapbox, waze: ui.sourceWaze, demo: ui.sourceDemo }[alert.source];
-    Alert.alert(`${alertIcons[alert.kind]} ${alertLabels[alert.kind]}`, `${eventPrompt(alert.kind)}\n${source}`, [{ text: ui.close }]);
+    Alert.alert(`${alertIcons[alert.kind]} ${alertLabels[alert.kind]}`, `${eventPrompt(alert.kind, preferences.humor)}\n${source}`, [{ text: ui.close }]);
   }
 
   return <View style={styles.root}>
@@ -257,6 +296,7 @@ export default function NavigationScreen() {
       <View style={styles.bottom} onLayout={event => setBottomHeight(event.nativeEvent.layout.height)}>
         <ScrollView style={styles.bottomScroll} contentContainerStyle={styles.bottomContent}>
           {!navigating && <FavoritePlaces target={destination} disabled={busy} onChoose={chooseDestination} />}
+          {!navigating && <PreferencesSheet value={preferences} disabled={!preferencesReady} onSave={updatePreferences} />}
           {!destination && <><Text style={styles.heading}>{ui.search}</Text><Text style={styles.note}>{ui.mapHint}</Text>
             {config.demo && <Button title={ui.chooseDemo} onPress={() => chooseDestination(demoDestination)} />}</>}
           {busy && <View style={styles.loading}><ActivityIndicator color="#087F72" /><Text style={styles.note}>{ui.calculating}</Text></View>}
@@ -273,11 +313,13 @@ export default function NavigationScreen() {
           {navigating && route && guidance && <View style={styles.trip}><Text style={styles.tripTime}>
             {Math.max(1, Math.ceil(route.duration * guidance.remaining / Math.max(1, guidance.total) / 60))} {ui.minutes}</Text>
             <Text style={styles.text}>{(guidance.remaining / 1000).toFixed(1)} {ui.km} · {destination?.name}</Text></View>}
+          {navigating && <><Text style={styles.note}>{modeLabels[mode]} · {tollPolicy === 'avoid' ? labels.avoid : tollPolicy === 'allow' ? labels.allow : labels.prefer}</Text>
+            <Button title={labels.change} disabled={busy || !gpsReady} onPress={() => { setDraftMode(mode); setDraftTolls(tollPolicy); setChangeOpen(true); }} /></>}
           {route && <Text style={styles.note}>{route.trafficAvailable ? ui.traffic : ui.noTraffic} · {ui.refreshed} {Math.floor((now - route.fetchedAt) / 60_000)} {ui.minutes}</Text>}
           {stale && <Text style={styles.warning}>{ui.stale}</Text>}
           {!!voiceStatus && <Text style={styles.note}>{voiceStatus}</Text>}
           <Text style={styles.note}>{community.status === 'live' ? ui.alertsLive : community.status === 'disabled' ? ui.alertsDisabled : ui.alertsOffline}</Text>
-          {!config.demo && <Text style={styles.note}>{community.partner === 'live' ? 'معطيات Waze مربوطة' : community.partner === 'offline' ? 'معطيات Waze ما تحدّثوش' : 'معطيات Waze ما مربوطاش'}</Text>}
+          {!config.demo && <Text style={styles.note}>{community.partner === 'live' ? labels.wazeLive : community.partner === 'offline' ? labels.wazeStale : labels.wazeOff}</Text>}
           {allAlerts.some(alert => alert.source === 'waze') && <Text style={styles.attribution} onPress={() => { void Linking.openURL('https://waze.com').catch(() => setMessage(ui.network)); }}>Data by Waze App. https://waze.com</Text>}
           <View style={styles.actions}>
             {route && <View style={styles.action}><Button title={navigating ? ui.stop : ui.start} disabled={!navigating && (busy || !gpsReady)} onPress={navigating ? stop : start} /></View>}
@@ -288,6 +330,20 @@ export default function NavigationScreen() {
         </ScrollView>
       </View>
     </SafeAreaView>
+    <Modal visible={changeOpen} transparent animationType="slide" onRequestClose={() => !busy && setChangeOpen(false)}>
+      <View style={styles.modalBackdrop}><SafeAreaView style={[styles.modal,{maxHeight:'85%'}]}><ScrollView contentContainerStyle={{gap:12}}>
+        <Text style={styles.heading}>{labels.change}</Text><Text style={styles.note}>{ui.parked}</Text>
+        {(['fastest','economical','shortest'] as RouteMode[]).map(value => <Button key={value} title={`${draftMode === value ? '● ' : '○ '}${modeLabels[value]}`} secondary disabled={busy} onPress={() => setDraftMode(value)} />)}
+        <Text style={styles.heading}>{labels.policy}</Text>
+        {(['automatic','avoid','allow'] as TollPolicy[]).map(value => <Button key={value} title={`${draftTolls === value ? '● ' : '○ '}${value === 'avoid' ? labels.avoid : value === 'allow' ? labels.allow : labels.prefer}`} secondary disabled={busy} onPress={() => setDraftTolls(value)} />)}
+        <Text style={styles.note}>{labels.allowNote}</Text>
+        {!!message && <Text style={styles.warning}>{message}</Text>}
+        {busy && <ActivityIndicator color="#087F72" />}
+        <Button title={labels.apply} disabled={busy || !gpsReady} onPress={() => void changeRoute(false)} />
+        <Button title={labels.alternative} secondary disabled={busy || !gpsReady} onPress={() => void changeRoute(true)} />
+        <Button title={ui.cancel} secondary disabled={busy} onPress={() => setChangeOpen(false)} />
+      </ScrollView></SafeAreaView></View>
+    </Modal>
     <Modal visible={reportOpen} transparent animationType="slide" onRequestClose={() => !sending && setReportOpen(false)}>
       <View style={styles.modalBackdrop}><SafeAreaView style={styles.modal}>
         <Text style={styles.heading}>{ui.report}</Text><Text style={styles.note}>{ui.parked}</Text>

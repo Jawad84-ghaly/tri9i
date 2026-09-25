@@ -1,5 +1,11 @@
 # Vérifications de la livraison
 
+## Version 1.2 — 25 septembre 2026
+
+TypeScript strict réussi ; 26 tests mobiles réussis (dont 6 langue/voix/préférences et 4 changements de trajet). Cas vérifiés : réglages conservés, erreurs de stockage, langue cohérente entre interface/favoris/consignes, voix compatible choisie ou absence signalée, essai de voix sans annuler la sourdine, rejet des péages sous interdiction stricte, changement de critère, comparaison d'alternatives malgré le déplacement de l'origine et absence d'alternative sans inventer un trajet.
+
+Le profil live vérifie maintenant l'accès effectif à un calcul Mapbox et le serveur d'alertes HTTPS avant compilation. Le fichier Render et le guide ONLINE.md préparent l'hébergement mais ne constituent pas un déploiement effectif. Les tests sur téléphone, la qualité de prononciation Darija et les trajets réels avec trafic restent à réaliser. Les changements de trajet sont commandés par boutons, sans reconnaissance vocale.
+
 ## Version 1.1 — 24 septembre 2026
 
 TypeScript strict réussi ; 16 tests mobiles (dont 4 sur la persistance des favoris), 4 tests serveur et 2 tests de connexion réussis. L'option économique préfère l'absence de péage et avertit explicitement lorsqu'une requête d'évitement retourne des péages. Un serveur communautaire sans flux partenaire annonce maintenant Waze désactivé, jamais connecté. Le workflow live exige un jeton Mapbox public et un serveur HTTPS joignable ; aucun accès fournisseur ni hébergement live n'est configuré au moment de ces vérifications. Les favoris sur appareil, les API authentifiées et les trajets GPS réels restent à valider sur téléphone.

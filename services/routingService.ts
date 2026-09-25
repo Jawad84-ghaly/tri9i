@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { config } from '../constants/config';
 import type { Coordinate, RoadAlert, Route, RouteOption } from '../types/navigation';
-import { isCoordinate } from '../utils/geo';
+import { isCoordinate, projectOnRoute } from '../utils/geo';
 import { jsonRequest } from './http';
 
 const position = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
@@ -95,7 +95,40 @@ async function fetchRoutes(origin: Coordinate, destination: Coordinate, tollExcl
   return raw.routes.map(r => normalize(r, tollExcluded, true));
 }
 
-export async function calculateRoutes(origin: Coordinate, destination: Coordinate, signal?: AbortSignal): Promise<RouteOption[]> {
+export type TollPolicy = 'automatic' | 'avoid' | 'allow';
+export type RouteRequest = { tollPolicy?: TollPolicy; alternativeTo?: Route };
+
+// Compare spatial overlap, not IDs or the first point: a recalculation begins at
+// the current vehicle position, so its prefix usually differs from the old route.
+export function isDifferentRoute(candidate: Route, previous: Route): boolean {
+  const points = candidate.geometry;
+  let samples = 0, different = 0;
+  for (let i = 0; i < points.length - 1; i += Math.max(1, Math.floor(points.length / 100))) {
+    const a = points[i]!, b = points[i + 1]!;
+    const midpoint = { latitude:(a.latitude+b.latitude)/2, longitude:(a.longitude+b.longitude)/2 };
+    samples++;
+    if (projectOnRoute(midpoint, previous.geometry).distance > 70) different++;
+  }
+  return samples > 0 && different / samples >= 0.1;
+}
+export function chooseRequestedOptions(regular: Route[], excluded: Route[], request: RouteRequest = {}): RouteOption[] {
+  const accepts = (r: Route) => (!request.alternativeTo || isDifferentRoute(r, request.alternativeTo))
+    && (request.tollPolicy !== 'avoid' || r.tollFree);
+  const free = excluded.filter(accepts), normal = regular.filter(accepts);
+  const choices = selectOptions(normal, free);
+  if (request.tollPolicy === 'allow') {
+    // Explicit toll permission removes the economical mode's toll-free priority;
+    // fuel remains the estimate, not a toll-price estimate.
+    choices[1] = { mode:'economical', route:[...normal,...free].sort((a,b) => a.fuelLiters-b.fuelLiters)[0] ?? null };
+    choices[1].tollsPossible = !!choices[1].route && !choices[1].route.tollFree;
+  }
+  choices.forEach((option, index) => {
+    option.sameAs = option.route ? choices.slice(0,index).find(previous => previous.route
+      && routeFingerprint(previous.route) === routeFingerprint(option.route!))?.mode : undefined;
+  });
+  return choices;
+}
+export async function calculateRoutes(origin: Coordinate, destination: Coordinate, signal?: AbortSignal, request: RouteRequest = {}): Promise<RouteOption[]> {
   if (!isCoordinate(origin) || !isCoordinate(destination)) throw new Error('INVALID_COORDINATES');
   if (!config.mapboxToken.startsWith('pk.')) throw new Error('MISSING_MAPBOX_TOKEN');
   // Partial failure leaves its option unavailable; never claim a toll route is economical.
@@ -105,5 +138,5 @@ export async function calculateRoutes(origin: Coordinate, destination: Coordinat
   if (signal?.aborted) throw new Error('ABORTED');
   const [regular, tollFree] = results;
   if (regular.status === 'rejected' && tollFree.status === 'rejected') throw new Error('ROUTING_FAILED');
-  return selectOptions(regular.status === 'fulfilled' ? regular.value : [], tollFree.status === 'fulfilled' ? tollFree.value : []);
+  return chooseRequestedOptions(regular.status === 'fulfilled' ? regular.value : [], tollFree.status === 'fulfilled' ? tollFree.value : [], request);
 }

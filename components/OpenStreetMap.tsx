@@ -4,6 +4,10 @@ import { WebView } from 'react-native-webview';
 import { alertIcons } from '../constants/darijaAudioPrompts';
 import type { Coordinate, Destination, RoadAlert, Route } from '../types/navigation';
 import { mapHtml } from './mapHtml';
+import { localized } from '../constants/language';
+const messages = localized({ retry:'الخريطة ما تحمّلاتش. شوف الكونكسيون وضغط هنا نعاودو.' },
+  { retry:'Carte non chargée. Vérifiez Internet et touchez ici pour réessayer.' },
+  { retry:'Map could not load. Check Internet and tap here to retry.' });
 
 type Props = {
   fix: Coordinate | null; route: Route | null; destination: Destination | null;
@@ -53,7 +57,7 @@ export function OpenStreetMap(props: Props) {
       }} />
     {(!ready || failed) && <View style={styles.notice}>
       {failed ? <Pressable accessibilityRole="button" onPress={() => { setReady(false); setFailed(false); setAttempt(a => a + 1); }}>
-        <Text style={styles.text}>الخريطة ما تحمّلاتش. شوف الكونكسيون وضغط هنا نعاودو.</Text>
+        <Text style={styles.text}>{messages.retry}</Text>
       </Pressable> : <ActivityIndicator color="#087F72" />}
     </View>}
   </View>;
